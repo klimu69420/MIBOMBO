@@ -30,7 +30,12 @@ let st = {
     skins: JSON.parse(localStorage.getItem('yamalSkins')) || ['yamal'],
     cur: localStorage.getItem('yamalCurrentSkin') || 'yamal',
     pass: localStorage.getItem('yamalGamePass') === 'true',
-    clm: JSON.parse(localStorage.getItem('yamalClaimedRewards')) || []
+    clm: JSON.parse(localStorage.getItem('yamalClaimedRewards')) || [],
+    shk: 0, // Screen shake intensity
+    cmb: 0, // Current combo
+    mcmb: 0, // Max combo in session
+    fvr: 0, // Fever mode intensity (0-100)
+    isf: false // Is in Fever mode?
 };
 
 let p = {
@@ -254,7 +259,8 @@ const ui = {
     confirmPaypal: document.getElementById('confirm-paypal'),
     cancelPaypal: document.getElementById('cancel-paypal'),
     menuSkin: document.getElementById('menu-skin-img'),
-    gameOnlyHUD: document.querySelectorAll('.hud-game-only')
+    gameOnlyHUD: document.querySelectorAll('.hud-game-only'),
+    cmb: document.getElementById('combo-container')
 };
 
 function msg(t, m) {
@@ -441,8 +447,10 @@ function syncPass() {
 let scf = 1;
 
 function start() {
-    cvs.width = window.innerWidth || document.documentElement.clientWidth;
-    cvs.height = window.innerHeight || document.documentElement.clientHeight;
+    const w = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    cvs.width = w;
+    cvs.height = h;
     
     // Scale game parameters based on height
     scf = Math.max(cvs.height / 800, 0.4);
@@ -488,6 +496,8 @@ function clr() {
     p.gr = true;
     st.jmps = 0;
     st.sh = false;
+    st.cmb = 0;
+    st.isf = false;
     obs = [];
     cld = [];
     cns = [];
@@ -504,12 +514,32 @@ function mkCld(x = cvs.width) {
 
 function mkCns() {
     let y = Math.random() > 0.5 ? cvs.height - cfg.gh - 50 * scf : cvs.height - cfg.gh - 200 * scf;
-    cns.push({ x: cvs.width, y, w: 30 * scf, h: 30 * scf, ok: false });
+    let count = 3 + Math.floor(Math.random() * 3); // 3 to 5 coins in a row
+    let gap = 150 * scf; // Significant space between coins in the row
+    
+    for(let i = 0; i < count; i++) {
+        cns.push({ 
+            x: cvs.width + i * gap, 
+            y, 
+            w: 30 * scf, 
+            h: 30 * scf, 
+            ok: false 
+        });
+    }
 }
 
 function refresh() {
     ui.sc.innerText = `SCORE: ${st.sc}`;
+    ui.sc.style.transform = `scale(${1 + (st.sc % 10 === 0 ? 0.2 : 0)})`; // Bounce every 10 points
     ui.cns.innerText = `COINS: ${st.money}`;
+    if (st.cmb > 1) {
+        ui.cmb.style.display = 'block';
+        ui.cmb.innerText = `COMBO X${st.cmb}`;
+        ui.cmb.style.transform = `scale(${1 + Math.min(st.cmb * 0.05, 1)})`;
+    } else {
+        ui.cmb.style.display = 'none';
+    }
+
     if (ui.lvl) ui.lvl.innerText = `LVL ${st.lvl}`;
     if (ui.xp) {
         let nxt = st.lvl * 1000;
@@ -609,6 +639,13 @@ function mkFlr() {
 }
 
 function loop(ts) {
+    ctx.save();
+    if (st.shk > 0) {
+        ctx.translate((Math.random() - 0.5) * st.shk, (Math.random() - 0.5) * st.shk);
+        st.shk *= 0.9;
+        if (st.shk < 0.1) st.shk = 0;
+    }
+
     ctx.clearRect(0, 0, cvs.width, cvs.height);
     
     // Draw static background once
@@ -706,10 +743,13 @@ function loop(ts) {
     ctx.strokeRect(screenX, screenY, screenW, screenH);
     
     // Screen Content (Yamal Run Text or Score)
-    ctx.fillStyle = ts % 1000 < 500 ? '#ffeb3b' : '#fff';
-    ctx.font = `${Math.floor(10 * scf)}px "Press Start 2P"`;
+    let screenText = st.on ? `SCORE ${st.sc}` : "GO!";
+    if (st.isf) screenText = "FEVER!!";
+    
+    ctx.fillStyle = (st.isf && ts % 100 < 50) ? '#ff00ff' : (ts % 1000 < 500 ? '#ffeb3b' : '#fff');
+    ctx.font = `${Math.floor((st.isf ? 14 : 10) * scf)}px "Press Start 2P"`;
     ctx.textAlign = 'center';
-    ctx.fillText(st.on ? `SCORE ${st.sc}` : "GO!", screenX + screenW/2, screenY + screenH/2 + 5 * scf);
+    ctx.fillText(screenText, screenX + screenW/2, screenY + screenH/2 + 5 * scf);
     ctx.textAlign = 'start'; // reset
 
     if (!st.on || st.over) {
@@ -736,8 +776,35 @@ function loop(ts) {
 
     if (p.y + p.h > cvs.height - cfg.gh) {
         p.y = cvs.height - cfg.gh - p.h;
+        if (p.dy > 5) { st.shk = p.dy * 0.5; mkFlr(); } // Impact shake
         p.dy = 0;
         p.gr = true;
+    }
+
+    // Fever Mode Logic
+    if (st.cmb >= 20 && !st.isf) {
+        st.isf = true;
+        st.fvr = 100;
+        st.shk = 50;
+        mkTxt(p.x, p.y - 100, 'FEVER MODE!', '#ff00ff');
+    }
+    if (st.isf) {
+        st.fvr -= 0.2;
+        if (st.fvr <= 0) { st.isf = false; st.cmb = 0; }
+        // Flash stadium screen
+        if (ts % 200 < 100) {
+            ctx.fillStyle = 'rgba(255, 0, 255, 0.1)';
+            ctx.fillRect(0, 0, cvs.width, cvs.height);
+        }
+    }
+
+    // Speed Trail (Juice)
+    if (st.v > 10 || st.isf) {
+        ctx.globalAlpha = 0.3;
+        for(let i=1; i<=3; i++) {
+            ctx.drawImage(p.img, p.x - i * st.v * 2, p.y, p.w, p.h);
+        }
+        ctx.globalAlpha = 1.0;
     }
 
     // Shadow
@@ -749,7 +816,9 @@ function loop(ts) {
         ctx.fill();
     }
 
-    ctx.drawImage(p.img, p.x, p.y, p.w, p.h);
+    // Draw Player with Speed Stretch
+    let stretch = 1 + (st.v - cfg.s0) * 0.02;
+    ctx.drawImage(p.img, p.x, p.y, p.w * stretch, p.h);
     
     // Particles
     for (let i = flr.length - 1; i >= 0; i--) {
@@ -781,23 +850,68 @@ function loop(ts) {
     }
 
     if (ts - st.t0 > cfg.spw / (st.v / cfg.s0)) { mkObs(); st.t0 = ts; }
-    if (ts - st.tc > 2000) { mkCns(); st.tc = ts; }
+    if (ts - st.tc > 4000) { mkCns(); st.tc = ts; } // Increased interval for groups
 
     // Coins
     for (let i = cns.length - 1; i >= 0; i--) {
         let c = cns[i];
         c.x -= st.v;
-        ctx.fillStyle = "#ffd700"; ctx.beginPath(); ctx.arc(c.x + c.w/2, c.y + c.h/2, c.w/2, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle = "#daa520"; ctx.lineWidth = 2; ctx.stroke();
+        let stretch = 1 + (st.v - cfg.s0) * 0.01;
+        
+        // Spacey Glow
+        let hue = (ts / 10) % 360;
+        let glowColor = st.isf ? `hsl(${hue}, 100%, 70%)` : '#ffd700';
+        
+        ctx.shadowBlur = 15 * scf;
+        ctx.shadowColor = glowColor;
+        
+        // Coin Body (Spacey Ellipse)
+        ctx.fillStyle = st.isf ? `hsl(${hue}, 100%, 50%)` : "#ffd700";
+        ctx.beginPath(); 
+        ctx.ellipse(c.x + c.w/2, c.y + c.h/2, (c.w/2) * stretch, c.h/2, 0, 0, Math.PI*2); 
+        ctx.fill();
+        
+        // Inner Shine
+        ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+        ctx.beginPath();
+        ctx.ellipse(c.x + c.w/3, c.y + c.h/3, c.w/6, c.h/6, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.strokeStyle = st.isf ? "#fff" : "#daa520"; 
+        ctx.lineWidth = 2; 
+        ctx.stroke();
+        
+        // Spacey Ring (Orbit)
+        if (st.cmb > 5 || st.isf) {
+            ctx.strokeStyle = glowColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            let rx = (c.w * 0.8) * stretch;
+            let ry = c.h * 0.3;
+            let rot = ts / 500;
+            ctx.ellipse(c.x + c.w/2, c.y + c.h/2, rx, ry, rot, 0, Math.PI*2);
+            ctx.stroke();
+            
+            // Sparkle on ring
+            ctx.fillStyle = "#fff";
+            ctx.beginPath();
+            ctx.arc(c.x + c.w/2 + Math.cos(rot) * rx, c.y + c.h/2 + Math.sin(rot) * ry, 2*scf, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        ctx.shadowBlur = 0; // Reset shadow for performance
 
         // Pass-through logic: Collect when coin passes the player's center
         if (!c.ok && c.x < p.x + p.w / 2) {
             c.ok = true;
-            st.money += 5;
+            let gain = st.isf ? 10 : 5;
+            st.money += gain;
+            st.cmb++;
+            st.shk = 5;
             localStorage.setItem('yamalCoins', st.money);
             sfx.p.play().catch(e => console.log('SFX play failed:', e));
+            mkTxt(c.x, c.y, `+${gain}`, '#ffd700');
             refresh();
-            // Don't remove yet, let it slide off screen naturally
         }
         if (c.x + c.w < 0) cns.splice(i, 1);
     }
@@ -811,17 +925,20 @@ function loop(ts) {
             ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.fillRect(o.x + 15, o.y + o.h - 10, o.w - 10, 10);
             ctx.fillStyle = "#5d4037"; ctx.fillRect(o.x + 10, o.y + 30, o.w - 20, o.h - 30);
         }
-        ctx.drawImage(o.img, o.x, o.y, o.w, 60);
+        let stretch = 1 + (st.v - cfg.s0) * 0.01;
+        ctx.drawImage(o.img, o.x, o.y, o.w * stretch, 60);
         
         let pb = { l: p.x + 60 * scf, r: p.x + p.w - 60 * scf, t: p.y + 50 * scf, b: p.y + p.h - 50 * scf };
         let ob = { l: o.x, r: o.x + o.w, t: o.y, b: o.y + o.h };
 
         if (pb.r > ob.l && pb.l < ob.r && pb.b > ob.t && pb.t < ob.b) {
-            if (st.sh) { st.sh = false; obs.splice(i, 1); sfx.h.play().catch(e => console.log('SFX play failed:', e)); continue; }
+            if (st.sh) { st.sh = false; obs.splice(i, 1); sfx.h.play().catch(e => console.log('SFX play failed:', e)); st.cmb = 0; st.shk = 20; continue; }
             sfx.h.play().catch(e => console.log('SFX play failed:', e));
             sfx.d.play().catch(e => console.log('SFX play failed:', e));
             sfx.m.pause();
+            st.shk = 40;
             st.over = true; refresh();
+            ctx.restore();
             st.aid = requestAnimationFrame(loop);
             return;
         }
@@ -829,11 +946,13 @@ function loop(ts) {
         if (!o.ok && o.x < p.x + p.w / 2) {
             o.ok = true;
             st.sc++;
-            addXP(50);
-            if (st.sc > 0 && st.sc % 100 === 0) { mkFlr(); mkTxt(cvs.width / 2 - 100, 100, '100 PT!', '#ffeb3b'); }
+            st.cmb++;
+            addXP(50 + st.cmb * 5);
+            if (st.sc > 0 && st.sc % 100 === 0) { mkFlr(); mkTxt(cvs.width / 2 - 100, 100, 'MAX ENERGY!', '#ffeb3b'); st.shk = 30; }
             if (p.y + p.h > o.y - 20 && p.y + p.h < o.y + 50) {
                 st.money += 10; addXP(100); sfx.p.play().catch(e => console.log('SFX play failed:', e));
-                mkTxt(p.x, p.y - 50, 'NEAR MISS! +10c', '#ffeb3b');
+                mkTxt(p.x, p.y - 50, 'LEGENDARY! +10c', '#ffeb3b');
+                st.shk = 15;
             }
             refresh();
         }
@@ -843,13 +962,24 @@ function loop(ts) {
     st.v += cfg.si;
     if (st.v > cfg.maxS) st.v = cfg.maxS;
 
+    ctx.restore();
     st.aid = requestAnimationFrame(loop);
 }
 
 function jump() {
     if (st.on && !st.over) {
-        if (p.gr) { p.dy = cfg.jf; p.gr = false; st.jmps = 1; sfx.j.play().catch(e => console.log('SFX play failed:', e)); }
-        else if (st.dj && st.jmps < 2) { p.dy = cfg.jf * 0.8; st.jmps = 2; sfx.j.play().catch(e => console.log('SFX play failed:', e)); }
+        if (p.gr) { 
+            p.dy = cfg.jf; p.gr = false; st.jmps = 1; 
+            sfx.j.play().catch(e => console.log('SFX play failed:', e)); 
+            st.shk = 5;
+            for(let i=0; i<10; i++) flr.push({x: p.x + p.w/2, y: p.y + p.h, vx: (Math.random()-0.5)*10, vy: -Math.random()*5, l: 50, c: '#fff'});
+        }
+        else if (st.dj && st.jmps < 2) { 
+            p.dy = cfg.jf * 0.8; st.jmps = 2; 
+            sfx.j.play().catch(e => console.log('SFX play failed:', e)); 
+            st.shk = 8;
+            for(let i=0; i<15; i++) flr.push({x: p.x + p.w/2, y: p.y + p.h/2, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, l: 60, c: '#00ffff'});
+        }
     }
 }
 
@@ -909,7 +1039,11 @@ function go() {
 
 // Initial Start
 start();
-window.onresize = start;
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', start);
+} else {
+    window.onresize = start;
+}
 
 // Service Worker & Install Logic
 if ('serviceWorker' in navigator) {
