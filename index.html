@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a237e">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="images/sd.png">
+    <title>Yamal Run Mobile</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #1a1a1a;
+            font-family: 'Press Start 2P', cursive;
+            user-select: none;
+            touch-action: none;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #222;
+        }
+        
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #70c5ce 0%, #70c5ce 70%, #ded895 70%, #ded895 100%);
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            max-width: 1200px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            justify-content: space-between;
+            padding: 0 40px;
+            color: white;
+            text-shadow: 3px 3px 0 #000;
+            pointer-events: none;
+            z-index: 15;
+            font-size: 14px;
+        }
+
+        .hud-item {
+            background: rgba(0,0,0,0.5);
+            padding: 10px 15px;
+            border-radius: 10px;
+            border: 2px solid #fff;
+        }
+        
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #1a237e 0%, #311b92 100%);
+            color: white;
+            z-index: 10;
+            transition: all 0.3s;
+        }
+        
+        #overlay.game-over-state {
+            background: rgba(0,0,0,0.85);
+        }
+
+        #overlay.hidden { opacity: 0; pointer-events: none; }
+        
+        .menu-skin-preview {
+            width: 120px;
+            height: 120px;
+            object-fit: contain;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 10px 10px rgba(0,0,0,0.5));
+            animation: float 2s infinite ease-in-out;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        h1 { 
+            font-size: 48px; 
+            margin-bottom: 30px; 
+            color: #ffeb3b; 
+            text-shadow: 5px 5px 0 #000;
+            animation: bounce 1s infinite alternate;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-10px); }
+        }
+
+        p { font-size: 18px; margin: 10px 0; }
+
+        .btn {
+            background: #ff9800;
+            color: white;
+            border: 4px solid #fff;
+            padding: 15px 30px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            box-shadow: 0 6px 0 #e65100;
+            transition: all 0.1s;
+            text-transform: uppercase;
+        }
+
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #e65100;
+        }
+
+        #shop-button { background: #9c27b0; box-shadow: 0 6px 0 #7b1fa2; }
+        #revive-button { background: #4caf50; box-shadow: 0 6px 0 #388e3c; }
+
+        #shop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #311b92;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 40px;
+            z-index: 20;
+            overflow-y: auto;
+        }
+
+        #shop.hidden { display: none; }
+
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 1000px;
+            margin: 30px auto;
+        }
+
+        .shop-item {
+            background: rgba(255,255,255,0.08);
+            border: 2px solid rgba(255,255,255,0.2);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border-radius: 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+        }
+
+        .shop-item:hover {
+            transform: translateY(-5px);
+            background: rgba(255,255,255,0.15);
+            border-color: #ffeb3b;
+            box-shadow: 0 10px 20px rgba(255,235,59,0.1);
+        }
+
+        .shop-item.equipped {
+            border: 4px solid #4caf50;
+            background: rgba(76, 175, 80, 0.15);
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+        }
+
+        .shop-item h3 { font-size: 14px; margin: 10px 0; text-align: center; color: #ffeb3b; }
+        .shop-item p { font-size: 10px; color: #ccc; margin-bottom: 15px; text-align: center; line-height: 1.5; }
+
+        .purchase-button {
+            width: 100%;
+            padding: 12px;
+            font-size: 10px;
+            background: #ffeb3b;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Press Start 2P', cursive;
+            box-shadow: 0 4px 0 #fbc02d;
+            transition: all 0.1s;
+        }
+
+        .purchase-button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #fbc02d;
+        }
+
+        .equip-button {
+            width: 100%;
+            padding: 10px;
+            font-size: 10px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Press Start 2P', cursive;
+            box-shadow: 0 4px 0 #1976d2;
+            transition: all 0.1s;
+        }
+
+        .equip-button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #1976d2;
+        }
+
+        .equip-button.equipped {
+            background: #4caf50;
+            box-shadow: 0 4px 0 #388e3c;
+            cursor: default;
+        }
+
+        #close-shop-button {
+            align-self: center;
+            margin-top: auto;
+        }
+
+        .score-final { font-size: 24px; color: #4caf50; margin: 20px 0; }
+        .hidden { display: none !important; }
+
+        /* Mobile Adjustments */
+        @media (max-width: 600px) {
+            h1 { font-size: 28px; margin-bottom: 20px; }
+            #ui { padding: 0 10px; font-size: 10px; top: 10px; }
+            .hud-item { padding: 5px 10px; }
+            .btn { font-size: 10px; padding: 12px 20px; margin: 5px; }
+            .shop-grid { grid-template-columns: 1fr; gap: 10px; }
+            .shop-item { padding: 15px; }
+            #overlay { padding: 20px; }
+            .menu-skin-preview { width: 80px; height: 80px; }
+            #shop, #game-pass, #locker, #donate-tab { padding: 20px; }
+            #title { font-size: 32px; }
+            p { font-size: 14px; }
+            .score-final { font-size: 20px; }
+            #final-score-container .btn { width: 90%; }
+        }
+
+        @media (max-height: 500px) {
+            #title { font-size: 24px; margin-bottom: 10px; }
+            .menu-skin-preview { width: 60px; height: 60px; }
+            p { font-size: 12px; margin: 5px 0; }
+            .btn { padding: 8px 15px; font-size: 9px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="board"></canvas>
+        
+        <div id="ui">
+            <div class="hud-item" id="level-display">LVL 1</div>
+            <div class="hud-item" style="flex: 1; margin: 0 20px; padding: 0; position: relative; height: 10px; background: #333; overflow: hidden; border: 2px solid #fff;">
+                <div id="xp-bar-fill" style="width: 0%; height: 100%; background: #4caf50;"></div>
+            </div>
+            <div class="hud-item hud-game-only" id="score">SCORE: 0</div>
+            <div class="hud-item" id="coins-display">COINS: 0</div>
+            <div class="hud-item hud-game-only" id="high-score">BEST: 0</div>
+        </div>
+
+        <div id="overlay">
+            <h1 id="title">YAMAL RUN</h1>
+            <p id="message">READY TO RUN?</p>
+            <p style="font-size: 12px; color: #aaa; margin-bottom: 20px;">COLLECT COINS & DODGE CLUBS</p>
+            
+            <div style="display: flex; align-items: center; gap: 30px; margin-bottom: 10px;">
+                <img id="menu-skin-img" class="menu-skin-preview" src="images/Lamine-Yamal-12-removebg-preview.png">
+                <button id="play-button" class="btn" style="background: #4caf50; font-size: 24px; padding: 20px 50px; box-shadow: 0 8px 0 #2e7d32;">PLAY</button>
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button id="install-button" class="btn hidden" style="background: #ffeb3b; color: #000; box-shadow: 0 6px 0 #fbc02d; padding: 10px 20px; font-size: 12px;">Install</button>
+                <button id="shop-button" class="btn" style="padding: 10px 20px; font-size: 12px;">Shop</button>
+                <button id="game-pass-button" class="btn" style="background: #2196f3; box-shadow: 0 6px 0 #1976d2; padding: 10px 20px; font-size: 12px;">Pass</button>
+                <button id="locker-button" class="btn" style="background: #607d8b; box-shadow: 0 6px 0 #455a64; padding: 10px 20px; font-size: 12px;">Locker</button>
+                <button id="donate-tab-button" class="btn" style="background: #4caf50; box-shadow: 0 6px 0 #388e3c; padding: 10px 20px; font-size: 12px;">Donate</button>
+                <button id="mail-dev-button" class="btn" style="background: #e91e63; box-shadow: 0 6px 0 #ad1457; padding: 10px 20px; font-size: 12px;">Mail Dev</button>
+            </div>
+            
+            <div id="final-score-container" class="hidden">
+                <div class="score-final" id="final-score">SCORE: 0</div>
+                <div style="display: flex; flex-direction: column; gap: 10px; width: 100%; align-items: center;">
+                    <button id="revive-button" class="btn" style="width: 100%; max-width: 400px;">REVIVE (50 COINS)</button>
+                    <button id="revive-ad-button" class="btn" style="background: #2196f3; box-shadow: 0 6px 0 #1976d2; width: 100%; max-width: 400px;">REVIVE (WATCH AD)</button>
+                    <button id="home-button" class="btn" style="background: #f44336; box-shadow: 0 6px 0 #d32f2f; width: 100%; max-width: 400px;">HOME</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="donate-tab" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #1b5e20; color: white; display: flex; flex-direction: column; padding: 40px; z-index: 35; overflow-y: auto;">
+        <h2 style="text-align:center; font-size: 32px; color: #ffeb3b;">DONATIONS</h2>
+        <p style="text-align:center; margin-bottom: 30px;">SUPPORT THE DEVELOPER TO KEEP THE GAME RUNNING!</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; max-width: 800px; margin: 0 auto;">
+            <div class="shop-item">
+                <h3>BRONZE</h3>
+                <p>A SMALL GESTURE</p>
+                <button class="btn donate-button" data-amt="1" style="width: 100%; font-size: 14px;">$1</button>
+            </div>
+            <div class="shop-item">
+                <h3>SILVER</h3>
+                <p>HELPING OUT</p>
+                <button class="btn donate-button" data-amt="5" style="width: 100%; font-size: 14px;">$5</button>
+            </div>
+            <div class="shop-item">
+                <h3>GOLD</h3>
+                <p>GENEROUS SOUL</p>
+                <button class="btn donate-button" data-amt="10" style="width: 100%; font-size: 14px;">$10</button>
+            </div>
+            <div class="shop-item">
+                <h3>LEGEND</h3>
+                <p>GAME PATRON</p>
+                <button class="btn donate-button" data-amt="50" style="width: 100%; font-size: 14px;">$50</button>
+            </div>
+        </div>
+        <button id="close-donate-button" class="btn" style="align-self:center; margin-top: 40px;">BACK</button>
+    </div>
+
+    <!-- Assets -->
+    <div style="display:none">
+        <img id="yamal" src="images/Lamine-Yamal-12-removebg-preview.png">
+        <img id="atm" src="images/atm.png">
+        <img id="chelsea" src="images/england_chelsea_128x128.football-logos.cc.png">
+        <img id="liverpool" src="images/liverpool.png">
+        <img id="real-madrid" src="images/spain_real-madrid_128x128.football-logos.cc.png">
+        <img id="bayern" src="images/germany_bayern-munchen_128x128.football-logos.cc.png">
+        <img id="inter" src="images/italy_inter_128x128.football-logos.cc.png">
+        <img id="dortmund" src="images/germany_borussia-dortmund_128x128.football-logos.cc.png">
+        <img id="leverkusen" src="images/germany_bayer-leverkusen_128x128.football-logos.cc.png">
+        <img id="valencia" src="images/spain_valencia_128x128.football-logos.cc.png">
+        <img id="betis" src="images/spain_real-betis_128x128.football-logos.cc.png">
+        <img id="napoli" src="images/italy_napoli_128x128.football-logos.cc.png">
+        <img id="mallorca" src="images/spain_mallorca_128x128.football-logos.cc.png">
+        <img id="osasuna" src="images/spain_osasuna_128x128.football-logos.cc.png">
+        <img id="oviedo" src="images/spain_oviedo_128x128.football-logos.cc.png">
+        <img id="player1" src="images/image-removebg-preview.png">
+        <img id="player2" src="images/image-removebg-preview (1).png">
+        <img id="player3" src="images/image-removebg-preview (2).png">
+        <img id="player4" src="images/image-removebg-preview (3).png">
+        <img id="messi" src="images/image-removebg-preview (4).png">
+        <img id="player6" src="images/image-removebg-preview (5).png">
+        <img id="player7" src="images/image-removebg-preview (6).png">
+        <img id="player8" src="images/image-removebg-preview (7).png">
+        <img id="player9" src="images/image-removebg-preview (8).png">
+        <img id="player10" src="images/image-removebg-preview (9).png">
+        <img id="player11" src="images/image-removebg-preview (10).png">
+    </div>
+
+    <div id="shop" class="hidden">
+        <h2 style="text-align:center; font-size: 32px; color: #ffeb3b;">THE SHOP</h2>
+        <div class="shop-grid">
+            <div class="shop-item">
+                <h3>DOUBLE JUMP</h3>
+                <p>JUMP AGAIN WHILE IN THE AIR</p>
+                <button id="buy-double-jump" class="purchase-button">500 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>SHIELD</h3>
+                <p>SURVIVE ONE HIT (CONSUMABLE)</p>
+                <button id="buy-shield" class="purchase-button">100 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>100 COINS</h3>
+                <p>INSTANT CASH INJECTION</p>
+                <button class="purchase-button" data-coins="100">$0.99</button>
+            </div>
+            <div class="shop-item">
+                <h3>500 COINS</h3>
+                <p>BIG BAG OF COINS</p>
+                <button class="purchase-button" data-coins="500">$1.99</button>
+            </div>
+            <div class="shop-item">
+                <h3>ATM SKIN</h3>
+                <img src="images/atm.png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>PLAY AS ATM LOGO</p>
+                <button class="purchase-button" data-skin="atm" data-cost="200">200 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>CHELSEA SKIN</h3>
+                <img src="images/england_chelsea_128x128.football-logos.cc.png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>PLAY AS CHELSEA LOGO</p>
+                <button class="purchase-button" data-skin="chelsea" data-cost="200">200 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>REAL SKIN</h3>
+                <img src="images/spain_real-madrid_128x128.football-logos.cc.png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>PLAY AS REAL MADRID LOGO</p>
+                <button class="purchase-button" data-skin="real-madrid" data-cost="500">500 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>BAYERN SKIN</h3>
+                <img src="images/germany_bayern-munchen_128x128.football-logos.cc.png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>PLAY AS BAYERN LOGO</p>
+                <button class="purchase-button" data-skin="bayern" data-cost="400">400 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>INTER SKIN</h3>
+                <img src="images/italy_inter_128x128.football-logos.cc.png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>PLAY AS INTER LOGO</p>
+                <button class="purchase-button" data-skin="inter" data-cost="400">400 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>DORTMUND SKIN</h3>
+                <img src="images/germany_borussia-dortmund_128x128.football-logos.cc.png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>PLAY AS DORTMUND LOGO</p>
+                <button class="purchase-button" data-skin="dortmund" data-cost="400">400 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>NAPOLI SKIN</h3>
+                <img src="images/italy_napoli_128x128.football-logos.cc.png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>PLAY AS NAPOLI LOGO</p>
+                <button class="purchase-button" data-skin="napoli" data-cost="300">300 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>YAMAL (DEFAULT)</h3>
+                <img src="images/Lamine-Yamal-12-removebg-preview.png" style="width: 50px; height: 50px; margin-bottom: 10px; object-fit: contain;">
+                <p>THE ORIGINAL RUNNER</p>
+                <button class="purchase-button" data-skin="yamal" data-cost="0">EQUIP</button>
+            </div>
+            <div class="shop-item">
+                <h3>VALEVEYWHERE SKIN</h3>
+                <img src="images/image-removebg-preview (4).png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>RUNS FAST</p>
+                <button class="purchase-button" data-skin="messi" data-cost="2000">2000 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>MESSI GOAT</h3>
+                <img src="images/image-removebg-preview.png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>THE GOAT</p>
+                <button class="purchase-button" data-skin="player1" data-cost="1000">1000 COINS</button>
+            </div>
+            <div class="shop-item">
+                <h3>OLISE</h3>
+                <img src="images/image-removebg-preview (1).png" style="width: 50px; height: 50px; margin-bottom: 10px;">
+                <p>EPIC PLAYER SKIN</p>
+                <button class="purchase-button" data-skin="player2" data-cost="1500">1500 COINS</button>
+            </div>
+        </div>
+
+        <h3 style="text-align:center; color: #ffeb3b; margin-top: 20px;">SUPPORT THE DEV</h3>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 600px; margin: 0 auto 30px;">
+            <button class="btn donate-button" data-amt="1" style="font-size: 12px; padding: 10px; background: #4caf50; box-shadow: 0 4px 0 #388e3c;">DONATE $1</button>
+            <button class="btn donate-button" data-amt="5" style="font-size: 12px; padding: 10px; background: #4caf50; box-shadow: 0 4px 0 #388e3c;">DONATE $5</button>
+            <button class="btn donate-button" data-amt="10" style="font-size: 12px; padding: 10px; background: #4caf50; box-shadow: 0 4px 0 #388e3c;">DONATE $10</button>
+            <button class="btn donate-button" data-amt="50" style="font-size: 12px; padding: 10px; background: #4caf50; box-shadow: 0 4px 0 #388e3c;">DONATE $50</button>
+            <button id="upi-button" class="btn" style="font-size: 12px; padding: 10px; background: #ff9800; box-shadow: 0 4px 0 #e65100; grid-column: 1 / -1; opacity: 0.7;">PAY WITH UPI (COMING SOON)</button>
+        </div>
+
+        <button id="close-shop-button" class="btn">BACK TO GAME</button>
+    </div>
+
+    <div id="game-pass" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #0d47a1 0%, #1a237e 100%); color: white; display: flex; flex-direction: column; padding: 20px; z-index: 25; overflow-y: auto;">
+        <div style="background: rgba(255,235,59,0.1); border: 2px solid #ffeb3b; border-radius: 15px; padding: 20px; margin-bottom: 20px; text-align: center;">
+            <h2 style="font-size: 28px; color: #ffeb3b; margin: 0; text-shadow: 0 0 10px rgba(255,235,59,0.5);">PREMIUM PASS</h2>
+            <p style="font-size: 10px; margin-top: 10px; color: #fff;">UNLOCK EXCLUSIVE SKINS & HUGE COIN REWARDS</p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; margin: 0 auto; width: 100%; max-width: 600px;">
+            <div style="display: flex; justify-content: space-between; font-size: 10px; padding: 10px; background: rgba(0,0,0,0.5); border: 2px solid #fff; border-radius: 5px;">
+                <div style="width: 40px;">LVL</div>
+                <div style="flex: 1; text-align: center; color: #ffeb3b;">PREMIUM REWARD</div>
+            </div>
+            <!-- Reward Rows -->
+            <div class="pass-row" data-level="5" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.2); border-radius: 10px; font-size: 12px; transition: 0.3s;">
+                <div style="width: 40px; font-weight: bold;">5</div>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 15px;">
+                    <img src="images/image-removebg-preview.png" style="width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));">
+                    <button class="claim-button claim-premium" data-lvl="5" data-type="premium" style="font-size: 10px; padding: 8px 15px; background: #ffeb3b; color: #000; border: none; border-radius: 5px; cursor: pointer; font-family: 'Press Start 2P';">CLAIM</button>
+                </div>
+            </div>
+            <div class="pass-row" data-level="10" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.2); border-radius: 10px; font-size: 12px;">
+                <div style="width: 40px; font-weight: bold;">10</div>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 15px;">
+                    <span style="font-size: 20px;">💰</span>
+                    <button class="claim-button claim-premium" data-lvl="10" data-type="premium" style="font-size: 10px; padding: 8px 15px; background: #ffeb3b; color: #000; border: none; border-radius: 5px; cursor: pointer; font-family: 'Press Start 2P';">500c</button>
+                </div>
+            </div>
+            <div class="pass-row" data-level="15" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.2); border-radius: 10px; font-size: 12px;">
+                <div style="width: 40px; font-weight: bold;">15</div>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 15px;">
+                    <img src="images/image-removebg-preview (1).png" style="width: 40px; height: 40px; object-fit: contain;">
+                    <button class="claim-button claim-premium" data-lvl="15" data-type="premium" style="font-size: 10px; padding: 8px 15px; background: #ffeb3b; color: #000; border: none; border-radius: 5px; font-family: 'Press Start 2P';">CLAIM</button>
+                </div>
+            </div>
+            <div class="pass-row" data-level="20" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.2); border-radius: 10px; font-size: 12px;">
+                <div style="width: 40px; font-weight: bold;">20</div>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 15px;">
+                    <span style="font-size: 20px;">💰</span>
+                    <button class="claim-button claim-premium" data-lvl="20" data-type="premium" style="font-size: 10px; padding: 8px 15px; background: #ffeb3b; color: #000; border: none; border-radius: 5px; font-family: 'Press Start 2P';">1000c</button>
+                </div>
+            </div>
+            <div class="pass-row" data-level="25" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.2); border-radius: 10px; font-size: 12px;">
+                <div style="width: 40px; font-weight: bold;">25</div>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 15px;">
+                    <img src="images/image-removebg-preview (2).png" style="width: 40px; height: 40px; object-fit: contain;">
+                    <button class="claim-button claim-premium" data-lvl="25" data-type="premium" style="font-size: 10px; padding: 8px 15px; background: #ffeb3b; color: #000; border: none; border-radius: 5px; font-family: 'Press Start 2P';">CLAIM</button>
+                </div>
+            </div>
+            <div class="pass-row" data-level="135" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: rgba(255,235,59,0.1); border: 2px solid #ffeb3b; border-radius: 10px; font-size: 14px;">
+                <div style="width: 40px; font-weight: bold; color: #ffeb3b;">MAX</div>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 15px;">
+                    <img src="images/image-removebg-preview (4).png" style="width: 50px; height: 50px; object-fit: contain; filter: drop-shadow(0 0 10px #ffeb3b);">
+                    <button class="claim-button claim-premium" data-lvl="135" data-type="premium" style="font-size: 12px; padding: 10px 20px; background: #ffeb3b; color: #000; border: none; border-radius: 5px; font-family: 'Press Start 2P';">MESSI</button>
+                </div>
+            </div>
+        </div>
+        <div style="text-align: center; margin-top: 30px; position: sticky; bottom: 0; background: #1a237e; padding: 20px; border-top: 2px solid rgba(255,255,255,0.1);">
+            <button id="buy-game-pass" class="btn" style="background: #ffeb3b; color: #000; box-shadow: 0 6px 0 #fbc02d; font-size: 16px; padding: 15px 40px; width: 100%; max-width: 500px;">UPGRADE TO PREMIUM ($1)</button>
+            <button id="close-game-pass-button" class="btn" style="font-size: 12px; padding: 10px 20px; margin-top: 15px;">BACK TO MENU</button>
+        </div>
+    </div>
+
+    <div id="locker" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #263238; color: white; display: flex; flex-direction: column; padding: 40px; z-index: 30; overflow-y: auto;">
+        <h2 style="text-align:center; font-size: 32px; color: #ffeb3b;">YOUR LOCKER</h2>
+        <div id="locker-grid" class="shop-grid">
+            <!-- Unlocked skins will be populated here -->
+        </div>
+        <button id="close-locker-button" class="btn">BACK</button>
+    </div>
+
+    <div id="paypal-passage" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #1a237e 0%, #311b92 100%); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 101;">
+        <h2 style="font-size: 32px; color: #ffeb3b; margin-bottom: 20px;">PROCEED TO PAYMENT</h2>
+        <p style="font-size: 16px; margin-bottom: 30px; max-width: 80%; text-align: center; line-height: 1.5;">You are about to be redirected to PayPal to complete your purchase. Please confirm that you want to proceed.</p>
+        <div style="display: flex; gap: 20px;">
+            <button id="confirm-paypal" class="btn" style="background: #4caf50; box-shadow: 0 6px 0 #388e3c;">PROCEED</button>
+            <button id="cancel-paypal" class="btn" style="background: #f44336; box-shadow: 0 6px 0 #d32f2f;">CANCEL</button>
+        </div>
+    </div>
+
+    <!-- Sexy Popup System -->
+    <div id="custom-popup" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 100; transition: all 0.3s;">
+        <div style="background: #1a237e; border: 4px solid #ffeb3b; padding: 30px; text-align: center; max-width: 80%; box-shadow: 0 0 30px #ffeb3b; border-radius: 20px;">
+            <h2 id="popup-title" style="color: #ffeb3b; font-size: 24px; margin-bottom: 20px;">NOTICE</h2>
+            <p id="popup-msg" style="color: white; font-size: 16px; margin-bottom: 30px; line-height: 1.5;"></p>
+            <div id="paypal-button-container" style="margin-bottom: 20px;"></div>
+            <button id="close-popup-btn" class="btn" style="font-size: 14px; padding: 10px 30px;">CLOSE</button>
+        </div>
+    </div>
+
+    <script src="js.js" defer></script>
+    <script src="https://www.paypal.com/sdk/js?client-id=sb&currency=USD" async></script>
+    <script src="https://pl28990299.profitablecpmratenetwork.com/1d/fb/d2/1dfbd2ab04f990f3f98f1de147e889ff.js" async></script>
+    <script type="text/javascript">
+        atOptions = {
+            'key' : '4161d91f3c1d5f25646203766a542621',
+            'format' : 'iframe',
+            'height' : 300,
+            'width' : 160,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://www.highperformanceformat.com/4161d91f3c1d5f25646203766a542621/invoke.js" async></script>
+</body>
+</html>
